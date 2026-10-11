@@ -1,0 +1,25 @@
+{
+  "required": true,
+  "package": "me.apika.nephritis.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "nephritis.refmap.json",
+  "minVersion": "0.8",
+  "mixins": [
+    "LivingEntityMixin",
+    "AbstractFurnaceBlockEntityAccessorMixin",
+    "LevelChunkInvokerMixin",
+    "LevelChunkTickerGateMixin",
+    "FurnaceStackChangeMixin",
+    "SignEditorChangeMixin",
+    "LevelEntityQueryMixin",
+    "EntityCollideSkipMixin",
+    "EntitySpatialIndexMovementMixin",
+    "HopperExtractHintMixin",
+    "LootableContainerExtractHintMixin",
+    "RedStoneWireBlockAccessorMixin",
+    "RedStoneWireBlockMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

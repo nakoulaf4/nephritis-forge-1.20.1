@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+showAsResourcePack=false
+logoFile="logo.png"
+
+[[mods]]
+modId="nephritis"
+version="${file.jarVersion}"
+displayName="Nephritis"
+authors="Nakoula F4, NoZeroG"
+description='''Performance mod for Minecraft 1.20.1. Forge port with Nalim/Rust cramming, hopper and entity-query optimizations, idle ticker gates, optional pre-generation, and an opt-in Alternate Current-inspired redstone network optimizer.'''
+
+[[dependencies.nephritis]]
+modId="forge"
+mandatory=true
+versionRange="[47.4,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.nephritis]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"

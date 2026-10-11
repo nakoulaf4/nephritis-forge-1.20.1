@@ -1,0 +1,254 @@
+buildscript {
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        mavenCentral()
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    }
+    dependencies {
+        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+    }
+}
+
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
+}
+
+version = project.mod_version + '-nalim-fixed'
+group = project.maven_group
+
+base { archivesName = project.archives_base_name }
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            property 'mixin.debug.export', 'true'
+            if (file('libs/nalim.jar').exists()) {
+                jvmArg '-XX:+UnlockExperimentalVMOptions'
+                jvmArg '-XX:+EnableJVMCI'
+                jvmArg '--add-modules=jdk.internal.vm.ci'
+                jvmArg '-Xbootclasspath/a:' + file('libs/nalim.jar').absolutePath
+                jvmArg "-javaagent:${file('libs/nalim.jar').absolutePath}"
+                // Keep Nalim on the boot class path so Forge's module classloader
+                // does not turn it into an isolated automatic module. Nalim v1.1
+                // is then in an unnamed module and the standard ALL-UNNAMED exports apply.
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code.site=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.runtime=ALL-UNNAMED'
+            }
+        }
+        server {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            property 'mixin.debug.export', 'true'
+            if (file('libs/nalim.jar').exists()) {
+                jvmArg '-XX:+UnlockExperimentalVMOptions'
+                jvmArg '-XX:+EnableJVMCI'
+                jvmArg '--add-modules=jdk.internal.vm.ci'
+                jvmArg '-Xbootclasspath/a:' + file('libs/nalim.jar').absolutePath
+                jvmArg "-javaagent:${file('libs/nalim.jar').absolutePath}"
+                // Keep Nalim on the boot class path so Forge's module classloader
+                // does not turn it into an isolated automatic module. Nalim v1.1
+                // is then in an unnamed module and the standard ALL-UNNAMED exports apply.
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.code.site=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.hotspot=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.meta=ALL-UNNAMED'
+                jvmArg '--add-exports=jdk.internal.vm.ci/jdk.vm.ci.runtime=ALL-UNNAMED'
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.minecraftforge.net' }
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    compileOnly files('libs/nalim.jar')
+}
+
+mixin {
+    add sourceSets.main, 'nephritis.refmap.json'
+    config 'nephritis.mixins.json'
+    debug.verbose = true
+    debug.export = true
+}
+
+jar {
+    manifest {
+        attributes([
+            'Specification-Title': 'Nephritis',
+            'Specification-Vendor': 'VoiceLessQ / Forge port',
+            'Specification-Version': project.version,
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor': 'Forge port',
+            'MixinConfigs': 'nephritis.mixins.json'
+        ])
+    }
+    // Native resources are intentionally kept inside the final jar; NalimBridge extracts the host library at runtime.
+}
+
+jar.finalizedBy('reobfJar')
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+processResources {
+    inputs.property 'nephritisVersion', project.version
+    filesMatching('nephritis-build.properties') {
+        expand(version: project.version)
+    }
+}
+
+// Native build is opt-in so normal Forge compilation stays usable even without Rust.
+tasks.register('buildRustNative') {
+    doLast {
+        def os = org.gradle.internal.os.OperatingSystem.current()
+        def arch = System.getProperty('os.arch', '').toLowerCase()
+        if (os.isWindows() && (arch.contains('amd64') || arch.contains('x86_64'))) {
+            exec {
+                workingDir file('rust/nephritis_native')
+                commandLine 'cargo', 'build', '--release'
+            }
+            copy {
+                from file('rust/nephritis_native/target/release/nephritis_native.dll')
+                into file('src/main/resources/assets/nephritis/natives/windows')
+            }
+        } else if (os.isLinux() && (arch.contains('amd64') || arch.contains('x86_64'))) {
+            exec {
+                workingDir file('rust/nephritis_native')
+                commandLine 'cargo', 'build', '--release'
+            }
+            copy {
+                from file('rust/nephritis_native/target/release/libnephritis_native.so')
+                into file('src/main/resources/assets/nephritis/natives/linux')
+            }
+        } else if (os.isLinux() && (arch.contains('aarch64') || arch.contains('arm64'))) {
+            exec {
+                workingDir file('rust/nephritis_native')
+                commandLine 'cargo', 'build', '--release'
+            }
+            copy {
+                from file('rust/nephritis_native/target/release/libnephritis_native.so')
+                into file('src/main/resources/assets/nephritis/natives/linux-aarch64')
+            }
+        } else {
+            throw new GradleException("Unsupported native build host: " + os + " / " + arch)
+        }
+    }
+}
+
+tasks.register('buildWithNative') {
+    dependsOn 'buildRustNative', 'build', 'verifyNalim'
+}
+
+tasks.named('build').configure {
+    mustRunAfter 'buildRustNative'
+}
+
+jar {
+    exclude 'one/nalim/**'
+}
+
+tasks.register('verifyNativePackaging') {
+    doLast {
+        def nativeRoot = file('src/main/resources/assets/nephritis/natives')
+        if (!nativeRoot.exists()) {
+            logger.lifecycle('No bundled Nephritis native libraries present; runtime will use Java fallbacks unless the jar is built with buildWithNative.')
+            return
+        }
+        def expected = [
+            file('src/main/resources/assets/nephritis/natives/windows/nephritis_native.dll'),
+            file('src/main/resources/assets/nephritis/natives/linux/libnephritis_native.so'),
+            file('src/main/resources/assets/nephritis/natives/linux-aarch64/libnephritis_native.so')
+        ]
+        def present = expected.findAll { it.exists() }
+        present.each { logger.lifecycle("Nephritis native packaged: ${it}") }
+        def requiredExports = ['nephritis_compute_cramming', 'nephritis_compute_redstone_bfs']
+        def u16 = { byte[] b, int o -> (b[o] & 0xFF) | ((b[o + 1] & 0xFF) << 8) }
+        def u32 = { byte[] b, int o -> (b[o] & 0xFF) | ((b[o + 1] & 0xFF) << 8) | ((b[o + 2] & 0xFF) << 16) | ((b[o + 3] & 0xFF) << 24) }
+        def problems = []
+        present.each { f ->
+            byte[] b = f.bytes
+            def name = f.name
+            if (name.endsWith('.dll')) {
+                if (b.length < 0x40 || b[0] != 0x4D || b[1] != 0x5A) {
+                    problems << "${f}: missing MZ header"
+                } else {
+                    int peOffset = u32(b, 0x3C)
+                    if (peOffset < 0x40 || peOffset > b.length - 6) {
+                        problems << "${f}: invalid e_lfanew ${peOffset}"
+                    } else if (b[peOffset] != 0x50 || b[peOffset + 1] != 0x45 || b[peOffset + 2] != 0 || b[peOffset + 3] != 0) {
+                        problems << "${f}: missing PE signature at offset ${peOffset}"
+                    } else if (u16(b, peOffset + 4) != 0x8664) {
+                        problems << "${f}: machine is 0x${Integer.toHexString(u16(b, peOffset + 4))}, expected 0x8664"
+                    }
+                }
+            } else if (name.endsWith('.so')) {
+                if (b.length < 20 || b[0] != 0x7F || b[1] != 0x45 || b[2] != 0x4C || b[3] != 0x46) {
+                    problems << "${f}: missing ELF header"
+                }
+            }
+            def text = new String(b, java.nio.charset.StandardCharsets.ISO_8859_1)
+            requiredExports.each { symbol ->
+                if (!text.contains(symbol)) {
+                    problems << "${f}: export ${symbol} not found"
+                }
+            }
+        }
+        if (!problems.isEmpty()) {
+            throw new GradleException("Nephritis native binary verification failed:\n - " + problems.join("\n - "))
+        }
+        logger.lifecycle('Nalim runtime is available from libs/nalim.jar for development; the built Nephritis jar intentionally does not embed it.')
+    }
+}
+
+tasks.named('jar') {
+    dependsOn 'verifyNativePackaging'
+}
+
+tasks.register('verifyNalim') {
+    doLast {
+        def nalim = file('libs/nalim.jar')
+        if (!nalim.exists()) {
+            throw new GradleException('Nalim runtime not found at libs/nalim.jar. Obtain the real upstream Nalim jar before using the native backend.')
+        }
+        def required = [
+            'one/nalim/Linker.class',
+            'one/nalim/Agent.class',
+            'one/nalim/Link.class'
+        ]
+        def zip = new java.util.zip.ZipFile(nalim)
+        try {
+            def missing = required.findAll { zip.getEntry(it) == null }
+            if (!missing.isEmpty()) {
+                throw new GradleException("libs/nalim.jar is not the expected upstream Nalim runtime; missing: ${missing.join(', ')}")
+            }
+            def manifest = zip.getEntry('META-INF/MANIFEST.MF')
+            if (manifest == null) {
+                throw new GradleException('libs/nalim.jar is missing META-INF/MANIFEST.MF')
+            }
+            def manifestText = new String(zip.getInputStream(manifest).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+            if (!manifestText.readLines().any { it.trim() == 'Premain-Class: one.nalim.Agent' }) {
+                throw new GradleException('libs/nalim.jar is missing Premain-Class: one.nalim.Agent')
+            }
+            logger.lifecycle("Nalim runtime verified: ${nalim} (Premain-Class=one.nalim.Agent)")
+        } finally {
+            zip.close()
+        }
+    }
+}
